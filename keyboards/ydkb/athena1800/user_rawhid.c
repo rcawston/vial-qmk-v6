@@ -169,9 +169,11 @@ static bool athena_gif_flush_page(void) {
         return true;
     }
 
+    uint32_t interrupts = save_and_disable_interrupts();
     c1_before_flash_operation();
     flash_range_program(gif_upload.slot_offset + gif_upload.page_base, gif_upload.page_data, FLASH_PAGE_SIZE);
     c1_after_flash_operation();
+    restore_interrupts(interrupts);
 
     gif_upload.page_dirty = false;
     return true;
@@ -198,9 +200,11 @@ static uint8_t athena_gif_begin_upload(uint8_t slot, uint32_t total_size) {
     memset(gif_upload.page_data, 0xFF, sizeof(gif_upload.page_data));
 
     uint32_t erase_size = (total_size + FLASH_SECTOR_SIZE - 1u) & ~(FLASH_SECTOR_SIZE - 1u);
+    uint32_t interrupts = save_and_disable_interrupts();
     c1_before_flash_operation();
     flash_range_erase(gif_upload.slot_offset, erase_size);
     c1_after_flash_operation();
+    restore_interrupts(interrupts);
     return ATHENA_GIF_STATUS_OK;
 }
 
@@ -295,28 +299,30 @@ static uint8_t athena_gif_set_active_slot(uint8_t slot) {
 void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
     uint8_t *command_id = &(data[0]);
     if (*command_id == 0xFD) {
-        data[2] = ATHENA_GIF_STATUS_BAD_CMD;
+        uint8_t command = data[1];
+        uint8_t status  = ATHENA_GIF_STATUS_BAD_CMD;
 
-        if (data[1] == ATHENA_GIF_GET_INFO) {
-            data[2] = ATHENA_GIF_STATUS_OK;
+        if (command == ATHENA_GIF_GET_INFO) {
+            status = ATHENA_GIF_STATUS_OK;
             data[3] = (uint8_t)(sizeof(gif_slot_addr) / sizeof(gif_slot_addr[0]));
             data[4] = user_eeconfig.gif_id;
             data[5] = user_eeconfig.lcd_off;
             uint32_t flash_size = PICO_FLASH_SIZE_BYTES;
             memcpy(&data[6], &flash_size, sizeof(flash_size));
-        } else if (data[1] == ATHENA_GIF_BEGIN_UPLOAD) {
+        } else if (command == ATHENA_GIF_BEGIN_UPLOAD) {
+            uint8_t slot = data[2];
             uint32_t total_size = 0;
             memcpy(&total_size, &data[3], sizeof(total_size));
-            data[2] = athena_gif_begin_upload(data[2], total_size);
-        } else if (data[1] == ATHENA_GIF_WRITE_CHUNK) {
+            status = athena_gif_begin_upload(slot, total_size);
+        } else if (command == ATHENA_GIF_WRITE_CHUNK) {
             uint32_t offset = 0;
             memcpy(&offset, &data[2], sizeof(offset));
-            data[2] = athena_gif_write_chunk(offset, &data[7], data[6]);
-        } else if (data[1] == ATHENA_GIF_FINISH_UPLOAD) {
-            data[2] = athena_gif_finish_upload(data[2]);
-        } else if (data[1] == ATHENA_GIF_SET_ACTIVE_SLOT) {
-            data[2] = athena_gif_set_active_slot(data[2]);
-        } else if (data[1] == 0xF1) {
+            status = athena_gif_write_chunk(offset, &data[7], data[6]);
+        } else if (command == ATHENA_GIF_FINISH_UPLOAD) {
+            status = athena_gif_finish_upload(data[2]);
+        } else if (command == ATHENA_GIF_SET_ACTIVE_SLOT) {
+            status = athena_gif_set_active_slot(data[2]);
+        } else if (command == 0xF1) {
             // 0xF1: write
             if (data[4] == 0) {
                 //data start
@@ -333,6 +339,7 @@ void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
                 }
             }
         }
+        data[2] = status;
     }
 }
 
