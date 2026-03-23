@@ -73,6 +73,8 @@ enum {
     ATHENA_GIF_WRITE_CHUNK = 0xA2,
     ATHENA_GIF_FINISH_UPLOAD = 0xA3,
     ATHENA_GIF_SET_ACTIVE_SLOT = 0xA4,
+    ATHENA_GIF_GET_SLOT_INFO = 0xA5,
+    ATHENA_GIF_READ_CHUNK = 0xA6,
 };
 
 enum {
@@ -137,6 +139,49 @@ static void athena_gif_reset_state(void) {
 
 static bool athena_gif_slot_valid(uint8_t slot) {
     return slot < (sizeof(gif_slot_addr) / sizeof(gif_slot_addr[0]));
+}
+
+static const qgf_graphics_descriptor_v1_t *athena_gif_get_slot_descriptor(uint8_t slot) {
+    if (!athena_gif_slot_valid(slot)) {
+        return NULL;
+    }
+    return (const qgf_graphics_descriptor_v1_t *)gif_slot_addr[slot];
+}
+
+static bool athena_gif_slot_has_valid_qgf(uint8_t slot, const qgf_graphics_descriptor_v1_t **descriptor_out) {
+    if (!athena_gif_slot_valid(slot)) {
+        return false;
+    }
+
+    const qgf_graphics_descriptor_v1_t *descriptor = athena_gif_get_slot_descriptor(slot);
+    if (descriptor == NULL) {
+        return false;
+    }
+
+    if (descriptor->header.type_id != QGF_GRAPHICS_DESCRIPTOR_TYPEID || descriptor->header.neg_type_id != (uint8_t)~QGF_GRAPHICS_DESCRIPTOR_TYPEID) {
+        return false;
+    }
+
+    if (descriptor->magic != QGF_MAGIC || descriptor->qgf_version != 1) {
+        return false;
+    }
+
+    if (descriptor->neg_total_file_size != ~descriptor->total_file_size) {
+        return false;
+    }
+
+    if (descriptor->total_file_size == 0 || descriptor->total_file_size > gif_slot_size[slot]) {
+        return false;
+    }
+
+    if (descriptor->image_width == 0 || descriptor->image_height == 0 || descriptor->frame_count == 0) {
+        return false;
+    }
+
+    if (descriptor_out != NULL) {
+        *descriptor_out = descriptor;
+    }
+    return true;
 }
 
 static bool athena_gif_validate_qgf(const void *buffer, uint32_t expected_size) {
@@ -296,6 +341,54 @@ static uint8_t athena_gif_set_active_slot(uint8_t slot) {
     return ATHENA_GIF_STATUS_OK;
 }
 
+static uint8_t athena_gif_get_slot_info(uint8_t slot, uint8_t *data) {
+    if (!athena_gif_slot_valid(slot)) {
+        return ATHENA_GIF_STATUS_BAD_SLOT;
+    }
+
+    const qgf_graphics_descriptor_v1_t *descriptor = NULL;
+    bool valid = athena_gif_slot_has_valid_qgf(slot, &descriptor);
+
+    data[3] = slot;
+    data[4] = valid ? 1 : 0;
+    data[5] = (user_eeconfig.gif_id == slot) ? 1 : 0;
+
+    uint32_t slot_size = gif_slot_size[slot];
+    memcpy(&data[6], &slot_size, sizeof(slot_size));
+
+    uint32_t total_size = valid ? descriptor->total_file_size : 0;
+    memcpy(&data[10], &total_size, sizeof(total_size));
+
+    uint16_t width = valid ? descriptor->image_width : 0;
+    uint16_t height = valid ? descriptor->image_height : 0;
+    uint16_t frame_count = valid ? descriptor->frame_count : 0;
+    memcpy(&data[14], &width, sizeof(width));
+    memcpy(&data[16], &height, sizeof(height));
+    memcpy(&data[18], &frame_count, sizeof(frame_count));
+    return ATHENA_GIF_STATUS_OK;
+}
+
+static uint8_t athena_gif_read_chunk(uint8_t slot, uint32_t offset, uint8_t requested_len, uint8_t *data) {
+    const qgf_graphics_descriptor_v1_t *descriptor = NULL;
+    if (!athena_gif_slot_has_valid_qgf(slot, &descriptor)) {
+        return ATHENA_GIF_STATUS_INVALID_QGF;
+    }
+
+    if (requested_len == 0 || requested_len > 24) {
+        return ATHENA_GIF_STATUS_BAD_LENGTH;
+    }
+
+    if (offset >= descriptor->total_file_size) {
+        return ATHENA_GIF_STATUS_BAD_OFFSET;
+    }
+
+    uint32_t remaining = descriptor->total_file_size - offset;
+    uint8_t actual_len = remaining < requested_len ? (uint8_t)remaining : requested_len;
+    memcpy(&data[4], &((const uint8_t *)descriptor)[offset], actual_len);
+    data[3] = actual_len;
+    return ATHENA_GIF_STATUS_OK;
+}
+
 void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
     uint8_t *command_id = &(data[0]);
     if (*command_id == 0xFD) {
@@ -322,6 +415,12 @@ void raw_hid_receive_kb(uint8_t *data, uint8_t length) {
             status = athena_gif_finish_upload(data[2]);
         } else if (command == ATHENA_GIF_SET_ACTIVE_SLOT) {
             status = athena_gif_set_active_slot(data[2]);
+        } else if (command == ATHENA_GIF_GET_SLOT_INFO) {
+            status = athena_gif_get_slot_info(data[2], data);
+        } else if (command == ATHENA_GIF_READ_CHUNK) {
+            uint32_t offset = 0;
+            memcpy(&offset, &data[3], sizeof(offset));
+            status = athena_gif_read_chunk(data[2], offset, data[7], data);
         } else if (command == 0xF1) {
             // 0xF1: write
             if (data[4] == 0) {
