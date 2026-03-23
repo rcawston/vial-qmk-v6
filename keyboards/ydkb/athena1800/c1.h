@@ -7,6 +7,11 @@ void c1_main_task(void);
 void c1_before_flash_operation(void);
 void c1_after_flash_operation(void);
 bool lcd_is_on(void);
+void user_eeconfig_sanitize(void);
+void display_init(void);
+void display_task_user(void);
+void display_power_toggle(void);
+void next_gif_id(void);
 
 void suspend_power_down_user_display(void);
 void suspend_wakeup_init_user_display(void);

@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "hal.h"
 #include "ch.h"
 #include "stdint.h"
+#include "c1.h"
 #include "quantum.h"
 #include "pico/bootrom.h" 
 #include "hardware/watchdog.h"
@@ -122,4 +123,3 @@ void post_process_record_user(uint16_t keycode, keyrecord_t *record)
         command_extra(KC_O); //display ON / OFF
     }
 }
-

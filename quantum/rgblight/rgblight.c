@@ -24,6 +24,9 @@
 #include "util.h"
 #include "led_tables.h"
 #include <lib/lib8tion/lib8tion.h>
+#if defined(RGBLIGHT_WS2812)
+#    include "ws2812.h"
+#endif
 #ifdef EEPROM_ENABLE
 #    include "eeprom.h"
 #endif
@@ -2275,7 +2278,7 @@ void rgblight_wakeup(void) {
 #endif
 
 __attribute__((weak)) void rgblight_call_driver(rgb_led_t *start_led, uint8_t num_leds) {
-    ws2812_setleds(start_led, num_leds);
+    ws2812_setleds((ws2812_led_t *)start_led, num_leds);
 }
 void rgblight_set(void) {
     rgb_led_t *start_led;

@@ -51,6 +51,9 @@ uint8_t now_debounce_up_mask = DEBOUNCE_UP_MASK;
 static void select_key(uint8_t mode);
 static uint8_t get_key(void);
 static void init_cols(void);
+void hook_keyboard_loop(void);
+void raw_hid_send_bouncing_key(uint8_t row, uint8_t col);
+void reboot(bool bootloader);
 __attribute__ ((weak))
 void matrix_scan_user(void) {}
 
@@ -68,6 +71,7 @@ void matrix_init(void)
 {
 
     user_eeconfig.raw = eeconfig_read_user();
+    user_eeconfig_sanitize();
 
     //debug_config.enable = 1;
     //debug_config.matrix = 1;
@@ -235,12 +239,10 @@ void bootmagic_scan(void)
             reboot(1);
         } else if (keys_down_pos[2] == 0xff) {
             //two keys down. if the other key is KC_E, clear eeprom.
-            if (eeprom_read_byte(VIA_EEPROM_CONFIG_END+1 + keys_down_pos[1]*2) == KC_E) {
+            if (eeprom_read_byte((const uint8_t *)(uintptr_t)(VIA_EEPROM_CONFIG_END + 1 + keys_down_pos[1] * 2)) == KC_E) {
                 eeconfig_init_via();
             }
         }
     }
     bootmagic_checked = 1;
 }
-
-

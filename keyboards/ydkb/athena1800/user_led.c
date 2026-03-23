@@ -17,6 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "hal.h"
 #include "ch.h"
+#include "ws2812.h"
 #include "led.h"
 #include "rgblight.h"
 
@@ -32,6 +33,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 extern rgblight_config_t rgblight_config;
+void led_set_user(uint8_t usb_led);
+void user_eeconfig_init(void);
 
 static LED_TYPE RGBLIGHT_COLOR_OFF = { .r = 0, .g = 0, .b = 0 };
 uint8_t indicator_state = 0;
@@ -50,7 +53,7 @@ void set_rgb_user(uint8_t r, uint8_t g,  uint8_t b)
         rgbled[i].g = g;
         rgbled[i].b = b;
     }
-    ws2812_setleds(rgbled, PHY_INDICATOR_NUM+RGBLED_NUM);
+    ws2812_setleds((ws2812_led_t *)rgbled, PHY_INDICATOR_NUM + RGBLED_NUM);
 }
 
 void rgblight_user_init(void)
@@ -86,13 +89,14 @@ void rgblight_call_driver(LED_TYPE *start_led, uint8_t num_leds) {
     rgb_extra_process(rgbled);
 #endif
 
-    ws2812_setleds(rgbled, PHY_INDICATOR_NUM+RGBLED_NUM);
+    ws2812_setleds((ws2812_led_t *)rgbled, PHY_INDICATOR_NUM + RGBLED_NUM);
 }
 
 extern bool bootmagic_checked;
 
 bool led_update_user(led_t usb_led) {
-    led_set_user(usb_led);
+    led_set_user(usb_led.raw);
+    return true;
 }
 
 void led_set_user(uint8_t usb_led)

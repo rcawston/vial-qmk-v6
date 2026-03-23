@@ -4,6 +4,8 @@
 #include "config.h"
 #include "debug.h"
 
+void qp_internal_task(void);
+
 //Reference: https://github.com/GongYiLiao/qmk_AdaFruitRp2040USBH/blob/master/c1_main.c
 
 static volatile bool   c1_stop_flag;

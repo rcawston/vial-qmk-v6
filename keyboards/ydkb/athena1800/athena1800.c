@@ -2,6 +2,17 @@
 #include "qp_comms.h"
 #include "c1.h"
 
+void platform_setup(void);
+void protocol_setup(void);
+void keyboard_setup(void);
+void protocol_pre_init(void);
+void keyboard_init(void);
+void protocol_post_init(void);
+void protocol_pre_task(void);
+void protocol_keyboard_task(void);
+void protocol_post_task(void);
+void housekeeping_task(void);
+
 int main(void) {
     platform_setup();
     protocol_setup();
